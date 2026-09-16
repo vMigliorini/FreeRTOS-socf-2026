@@ -60,8 +60,6 @@ void vYaw(void *pvParameters) {
 	Motores *pMotores = pParametros->pMotores;
 	char* instrucao = pParametros->instrucao;
 
-	vTaskDelay(10);
-
 	// Condicao para execucao das instrucoes especificas
 	if (instrucao != NULL && strcmp(instrucao, "horario") == 0){
 		
@@ -121,7 +119,6 @@ void vPitch(void *pvParameters){
 	Motores *pMotores = pParametros->pMotores;
 	char* instrucao = pParametros->instrucao;
 
-	vTaskDelay(40);
 
 	if (instrucao != NULL && strcmp(instrucao, "frente") == 0){
 		
@@ -184,7 +181,6 @@ void vRoll(void *pvParameters){
 	Motores *pMotores = pParametros->pMotores;
 	char* instrucao = pParametros->instrucao;
 
-	vTaskDelay(20);
 
 	if (instrucao != NULL && strcmp(instrucao, "direita") == 0){
 		
