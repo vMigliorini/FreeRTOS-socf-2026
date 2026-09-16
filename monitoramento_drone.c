@@ -2,7 +2,7 @@
 Curso: Bacharelado em Ciência da Computação
 Disciplina: Sistemas Operacionais Ciberfísicos
 Período: 4
-Turma: U
+Turma: A
 Integrantes:
 - Vicente Migliorini
 */
