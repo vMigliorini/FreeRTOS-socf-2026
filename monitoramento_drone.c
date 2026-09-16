@@ -10,263 +10,250 @@ Integrantes:
 #include "FreeRTOS.h"
 #include "task.h"
 #include <stdio.h>
-#include "basic_io.h"
 #include "semphr.h"
+#include <time.h>
+#include "basic_io.h"
 #include <string.h>
 
 // declaracao das funcoes que serao passadas nas tasks
 void vYaw(void *pvParameters);
 void vRoll(void *pvParameters);
 void vPitch(void *pvParameters);
+void radioFrenquencia(void *pvParameters);
 
-// declaracao da struct que guarda a velocidade dos motores
-typedef struct {
-	int motor0;
-	int motor1;
-	int motor2;
-	int motor3;
-} Motores;
+// xSemaphore
+SemaphoreHandle_t xSemaphore;
 
-// declaracao da struct que guarda um ponteiro para a struct das velocidades e uma string de instrucao
-typedef struct {
-	Motores *pMotores;
-	char *instrucao;
-} Parametros;
+// variáveis globais
+int BUFFER_SIZE = 20;
+
+volatile char sentido[20];
+volatile char direcao[20];
+volatile char orientacao[20];
+
+volatile long motor0;
+volatile long motor1;
+volatile long motor2;
+volatile long motor3;
 
 // valor de acresimo e decresimo e valor padrao das velocidades do motores respectivamente
 const int DEFAULT_CHANGE = 1;
 const int DEFAULT_VALUE = 100;
 
-// Semaforo para lidar com condição de corrida
-static SemaphoreHandle_t xMotorMutex;
 
 // funcao para printar o status dos motores e a instrucao
-void print_status(char *pMensagem, Motores *pMotores){
+void print_status(char *pMensagem){
 	vPrintString(pMensagem);
  
-	vPrintStringAndNumber("motor0: ", pMotores->motor0);
-	vPrintStringAndNumber("motor1: ", pMotores->motor1);
-	vPrintStringAndNumber("motor2: ", pMotores->motor2);
-	vPrintStringAndNumber("motor3: ", pMotores->motor3);
+	vPrintStringAndNumber("motor0: ", motor0);
+	vPrintStringAndNumber("motor1: ", motor1);
+	vPrintStringAndNumber("motor2: ", motor2);
+	vPrintStringAndNumber("motor3: ", motor3);
 }
 
 // funcao para guinada
 void vYaw(void *pvParameters) {
 
-	// pega os parametros passados
-	Parametros *pParametros = (Parametros *) pvParameters;
+	for (;;){
+		// instrução de guinada no sentido horário
+		if (sentido != NULL && strcmp(sentido, "horario") == 0)
+		{
 
-	// "Desembrulha os parametros"
-	Motores *pMotores = pParametros->pMotores;
-	char* instrucao = pParametros->instrucao;
+			xSemaphoreTake(xSemaphore, portMAX_DELAY);
 
-	// Condicao para execucao das instrucoes especificas
-	if (instrucao != NULL && strcmp(instrucao, "horario") == 0){
-		
-		for (;;){
-			// pega o semaforo para alterar os valores e printar
-			xSemaphoreTake(xMotorMutex, portMAX_DELAY);
-
-			pMotores->motor0 += DEFAULT_CHANGE;
-			pMotores->motor2 += DEFAULT_CHANGE;
-			pMotores->motor1 -= DEFAULT_CHANGE;
-			pMotores->motor3 -= DEFAULT_CHANGE;
+			motor0 += DEFAULT_CHANGE;
+			motor2 += DEFAULT_CHANGE;
+			motor1 -= DEFAULT_CHANGE;
+			motor3 -= DEFAULT_CHANGE;
 
 			char *pMensagem = "Guinada para o sentido horario\n";
 
 			// Printa o status dos motores
-			print_status(pMensagem, pMotores);
+			print_status(pMensagem);
+			xSemaphoreGive(xSemaphore);
 			
-			// solta o semaforo
-			xSemaphoreGive(xMotorMutex);
-			vTaskDelay(10);
+			vTaskDelay(portTICK_RATE_MS * 10);
+
 		}
-
-	}else if(instrucao != NULL && strcmp(instrucao, "anti-horario") == 0){
-
-		for (;;){
-			// pega o semaforo para alterar os valores e printar
-			xSemaphoreTake(xMotorMutex, portMAX_DELAY);
-
-			pMotores->motor1 += DEFAULT_CHANGE;
-			pMotores->motor3 += DEFAULT_CHANGE;
-			pMotores->motor0 -= DEFAULT_CHANGE;
-			pMotores->motor2 -= DEFAULT_CHANGE;
+		// instrução de guinada no anti-horário
+		else if (sentido != NULL && strcmp(sentido, "anti-horario") == 0)
+		{
+			xSemaphoreTake(xSemaphore, portMAX_DELAY);
+			motor1 += DEFAULT_CHANGE;
+			motor3 += DEFAULT_CHANGE;
+			motor0 -= DEFAULT_CHANGE;
+			motor2 -= DEFAULT_CHANGE;
 
 			char *pMensagem = "Guinada para o sentido anti-horario\n";
 
 			// Printa o status dos motores
-			print_status(pMensagem, pMotores);
-			// solta o semaforo
-			xSemaphoreGive(xMotorMutex);
+			print_status(pMensagem);
+			xSemaphoreGive(xSemaphore);
 
-			vTaskDelay(10);
+			vTaskDelay(portTICK_RATE_MS * 10);
 		}
-
-	}else{
-		char* mensagem_erro = "Problemas na alocação da instrução de guinada";
-		vPrintString(mensagem_erro);
+		else
+		{
+			char* mensagem_erro = "Problemas na alocação da instrução de guinada";
+			vPrintString(mensagem_erro);
+		}
 	}
 
 	vTaskDelete(NULL);
 }
 
 void vPitch(void *pvParameters){
-	// pega os parametros
-	Parametros *pParametros = (Parametros *) pvParameters;
-
-	// "Desembrulha"
-	Motores *pMotores = pParametros->pMotores;
-	char* instrucao = pParametros->instrucao;
-
-
-	if (instrucao != NULL && strcmp(instrucao, "frente") == 0){
-		
-		for (;;){
-			// pega o semaforo para alterar os valores e printar
-			xSemaphoreTake(xMotorMutex, portMAX_DELAY);
-
-			pMotores->motor2 += DEFAULT_CHANGE;
-			pMotores->motor3 += DEFAULT_CHANGE;
-			pMotores->motor0 -= DEFAULT_CHANGE;
-			pMotores->motor1 -= DEFAULT_CHANGE;
+	for (;;)
+	{
+		// instruções de arfagem para frente
+		if (direcao != NULL && strcmp(direcao, "frente") == 0)
+		{
+			xSemaphoreTake(xSemaphore, portMAX_DELAY);
+			motor2 += DEFAULT_CHANGE;
+			motor3 += DEFAULT_CHANGE;
+			motor0 -= DEFAULT_CHANGE;
+			motor1 -= DEFAULT_CHANGE;
 
 			char *pMensagem = "arfagem para frente\n";
 
 			// Printa o status dos motores
-			print_status(pMensagem, pMotores);
+			print_status(pMensagem);
+			xSemaphoreGive(xSemaphore);
 
-			// Solta o semaforo
-			xSemaphoreGive(xMotorMutex);
-
-			vTaskDelay(40);
+			vTaskDelay(portTICK_RATE_MS * 40);
 		}
-
-	}else if(instrucao != NULL && strcmp(instrucao, "tras") == 0){
-
-		for (;;){
-
-			// pega o semaforo para alterar os valores e printar
-			xSemaphoreTake(xMotorMutex, portMAX_DELAY);
-
-			pMotores->motor0 += DEFAULT_CHANGE;
-			pMotores->motor1 += DEFAULT_CHANGE;
-			pMotores->motor2 -= DEFAULT_CHANGE;
-			pMotores->motor3 -= DEFAULT_CHANGE;
+		// instruções de arfagem para trás
+		else if (direcao != NULL && strcmp(direcao, "tras") == 0)
+		{
+			xSemaphoreTake(xSemaphore, portMAX_DELAY);
+			motor0 += DEFAULT_CHANGE;
+			motor1 += DEFAULT_CHANGE;
+			motor2 -= DEFAULT_CHANGE;
+			motor3 -= DEFAULT_CHANGE;
 
 			char *pMensagem = "Arfagem para tras\n";
 
 			// Printa o status dos motores
-			print_status(pMensagem, pMotores);
+			print_status(pMensagem);
+			xSemaphoreGive(xSemaphore);
 
-			// Solta o semaforo
-			xSemaphoreGive(xMotorMutex);
-
-			vTaskDelay(40);
+			vTaskDelay(portTICK_RATE_MS * 40);
 		}
-
-	}else{
-		char* mensagem_erro = "Problemas na alocação da instrução de arfagem";
-		vPrintString(mensagem_erro);
+		else
+		{
+			char* mensagem_erro = "Problemas na alocação da instrução de arfagem";
+			vPrintString(mensagem_erro);
+		}
 	}
 
 	vTaskDelete(NULL);
 }
 
 void vRoll(void *pvParameters){
-	// Pega os parametros
-	Parametros *pParametros = (Parametros *) pvParameters;
+	for(;;)
+	{
+		// instruções para rolagem à direita
+		if (orientacao != NULL && strcmp(orientacao, "direita") == 0)	
+		{
+			xSemaphoreTake(xSemaphore, portMAX_DELAY);
 
-	// "Desembrulha"
-	Motores *pMotores = pParametros->pMotores;
-	char* instrucao = pParametros->instrucao;
-
-
-	if (instrucao != NULL && strcmp(instrucao, "direita") == 0){
-		
-		for (;;){
-
-			// Pega o semaforo para alterar e printar os valores
-			xSemaphoreTake(xMotorMutex, portMAX_DELAY);
-
-			pMotores->motor0 += DEFAULT_CHANGE;
-			pMotores->motor3 += DEFAULT_CHANGE;
-			pMotores->motor1 -= DEFAULT_CHANGE;
-			pMotores->motor2 -= DEFAULT_CHANGE;
+			motor0 += DEFAULT_CHANGE;
+			motor3 += DEFAULT_CHANGE;
+			motor1 -= DEFAULT_CHANGE;
+			motor2 -= DEFAULT_CHANGE;
 
 			char *pMensagem = "Rolagem para a direita\n";
 			// Printa o status dos motores
-			print_status(pMensagem, pMotores);
+			print_status(pMensagem);
+			xSemaphoreGive(xSemaphore);
 
-			// "Desembrulha"
-			xSemaphoreGive(xMotorMutex);
-			vTaskDelay(20);
+			vTaskDelay(portTICK_RATE_MS * 20);
 		}
+		// instruções para rolagem à esquerda
+		else if (orientacao != NULL && strcmp(orientacao, "esquerda") == 0)
+		{
+			xSemaphoreTake(xSemaphore, portMAX_DELAY);
 
-	}else if(instrucao != NULL && strcmp(instrucao, "esquerda") == 0){
-
-		for (;;){
-
-			// Pega o semaforo para alterar e printar os valores
-			xSemaphoreTake(xMotorMutex, portMAX_DELAY);
-
-			pMotores->motor1 += DEFAULT_CHANGE;
-			pMotores->motor2 += DEFAULT_CHANGE;
-			pMotores->motor0 -= DEFAULT_CHANGE;
-			pMotores->motor3 -= DEFAULT_CHANGE;
+			motor1 += DEFAULT_CHANGE;
+			motor2 += DEFAULT_CHANGE;
+			motor0 -= DEFAULT_CHANGE;
+			motor3 -= DEFAULT_CHANGE;
 
 			char *pMensagem = "Rolagem para a esquerda\n";
 
 			// Printa o status dos motores
-			print_status(pMensagem, pMotores);
+			print_status(pMensagem);
+			xSemaphoreGive(xSemaphore);
 
-			// Solta o semaforo
-			xSemaphoreGive(xMotorMutex);
-			vTaskDelay(20);
+			vTaskDelay(portTICK_RATE_MS * 20);
 		}
-
-	}else{
-		char* mensagem_erro = "Problemas na alocação da instrução de Rolagem";
-		vPrintString(mensagem_erro);
+		else
+		{
+			char* mensagem_erro = "Problemas na alocação da instrução de Rolagem";
+			vPrintString(mensagem_erro);
+		}
 	}
 
 	vTaskDelete(NULL);
 }
 
+void radioFrenquencia(void *pvParameters){
+	for (;;)
+	{
+		// calculando valores aleatorios
+		int dadoUm = rand() % 100;
+		int dadoDois = rand() % 100;
+		int dadoTres = rand() % 100;
+
+		xSemaphoreTake(xSemaphore, portMAX_DELAY);
+
+		// atribuindo instruções com base nos resultados aleatórios
+		if (dadoUm % 2 == 0){
+			sprintf(sentido, "horario");
+		}else{
+			sprintf(sentido, "anti-horario");
+		}
+
+		if (dadoDois % 2 == 0){
+			sprintf(direcao, "frente");
+		}else{
+			sprintf(direcao, "tras");
+		}
+
+		if (dadoTres % 2 == 0){
+			sprintf(orientacao, "direita");
+		}else{
+			sprintf(orientacao, "esquerda");
+		}
+
+		// concatenação e print das instruções novas
+		char status[BUFFER_SIZE * 3 + 50];
+		snprintf(status, sizeof(status), "INSTRUÇÔES: %s, %s, %s\n", direcao, orientacao, sentido);
+
+		vPrintString(status);
+
+		xSemaphoreGive(xSemaphore);
+		vTaskDelay(portTICK_RATE_MS * 100);
+	}
+}
+
 void main_(void)
 {
-	// Declara a struct dos motores
-	static Motores motores;
+	motor0, motor1, motor2, motor3 = DEFAULT_VALUE;
 
-	// Definindo os valores dos motores
-	motores.motor0 = DEFAULT_VALUE;
-	motores.motor1 = DEFAULT_VALUE;
-	motores.motor2 = DEFAULT_VALUE;
-	motores.motor3 = DEFAULT_VALUE;
+	srand(time(NULL));
 
-	// define uma struct para cada orientacao
-	static Parametros parametrosYaw, parametrosRoll, parametrosPitch;
+	vSemaphoreCreateBinary(xSemaphore);
 
-	// aloca os motores das structs parametros com base nos motores que já declaramos
-	parametrosYaw.pMotores = &motores;
-	parametrosRoll.pMotores = &motores;
-	parametrosPitch.pMotores = &motores;
+	strcpy(direcao, "frente");
+	strcpy(orientacao, "direita");
+	strcpy(sentido, "horario");
 
-	// Declaracao do semaforo
-	xMotorMutex = xSemaphoreCreateMutex();
+	xTaskCreate(vYaw, "Guinada", 1000, NULL, 2, NULL);
+	xTaskCreate(vRoll, "Rolagem", 1000, NULL, 2, NULL);
+	xTaskCreate(vPitch, "Arfagem", 1000, NULL, 2, NULL);
+	xTaskCreate(radioFrenquencia, "Radio Frequencia", 1000, NULL, 1, NULL);
 
-	//Define cada instrucao e cria as task
-	// caso queira testar cada instrucao, altere os valores de instrucao
-	parametrosYaw.instrucao = "horario";
-	xTaskCreate(vYaw, "Guinada", 1000, &parametrosYaw, 1, NULL);
-
-	parametrosRoll.instrucao = "direita";
-	xTaskCreate(vRoll, "Rolagem", 1000, &parametrosRoll, 1, NULL);
-
-	parametrosPitch.instrucao = "frente";
-	xTaskCreate(vPitch, "Arfagem", 1000, &parametrosPitch, 1, NULL);
-
-	// Inicia o escalonador de tarefas
 	vTaskStartScheduler();
 
 	return;
